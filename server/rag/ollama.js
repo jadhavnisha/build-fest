@@ -98,18 +98,22 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
       return data.embeddings[0];
     }
     // Fallback for unexpected response format
-    console.warn('Unexpected embedding response format:', data);
+    if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+      console.warn('Unexpected embedding response format. Keys:', Object.keys(data));
+    }
     throw new Error('Unexpected response format from Ollama embedding API');
   } catch (error) {
-    // Log detailed error information for debugging
-    console.error('\n🔍 Debug info:', {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      cause: error.cause,
-      causeName: error.cause?.name,
-      causeCode: error.cause?.code
-    });
+    // Log detailed error information for debugging (only in debug/dev mode)
+    if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+      console.error('\n🔍 Debug info:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        cause: error.cause,
+        causeName: error.cause?.name,
+        causeCode: error.cause?.code
+      });
+    }
     
     if (isConnectionError(error)) {
       handleConnectionError(); // This throws, so no code after this executes
