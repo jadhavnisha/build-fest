@@ -266,9 +266,31 @@ Check server status
 
 ## 🛠️ Troubleshooting
 
-### Ollama not found
+### Ollama service not running
+The system uses Ollama's HTTP API at `http://localhost:11434`. Make sure Ollama is running:
+
 ```bash
 # Check if Ollama is running
+ollama list
+
+# Start Ollama service (if needed)
+ollama serve
+```
+
+If you get an error about Ollama not being available, ensure:
+1. Ollama is installed (`ollama --version` should show version 0.13.2 or higher)
+2. The Ollama service is running (default port: 11434)
+3. You can access `http://localhost:11434/api/tags` in your browser or via curl:
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+### Ollama CLI commands not working
+```bash
+# The system uses Ollama's HTTP API, not CLI commands
+# But you can still use CLI commands for management:
+
+# Check if Ollama is installed and list models
 ollama list
 
 # Start Ollama service (if needed)
