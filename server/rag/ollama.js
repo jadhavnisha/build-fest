@@ -25,15 +25,14 @@ try {
 function isConnectionError(error) {
   return error.cause?.code === 'ECONNREFUSED' || 
          error.code === 'ECONNREFUSED' ||
-         error.name === 'TypeError' && error.message.includes('fetch');
+         (error.name === 'TypeError' && error.message.includes('fetch'));
 }
 
 /**
  * Handle connection errors with helpful messages
- * @param {string} context - Context where error occurred
  * @throws {Error}
  */
-function handleConnectionError(context = 'operation') {
+function handleConnectionError() {
   console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
   console.error('Please ensure:');
   console.error('  1. Ollama is installed: ollama --version');
@@ -79,8 +78,9 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     return data.embedding;
   } catch (error) {
     if (isConnectionError(error)) {
-      handleConnectionError('generate embedding');
+      handleConnectionError(); // This throws, so no code after this executes
     }
+    // Only reached if not a connection error
     console.error('Error generating embedding:', error.message);
     throw new Error(`Failed to generate embedding: ${error.message}`);
   }
@@ -125,8 +125,9 @@ export async function generateChatCompletion(systemPrompt, userPrompt, model = '
     return data.message.content;
   } catch (error) {
     if (isConnectionError(error)) {
-      handleConnectionError('generate chat completion');
+      handleConnectionError(); // This throws, so no code after this executes
     }
+    // Only reached if not a connection error
     console.error('Error generating chat completion:', error.message);
     throw new Error(`Failed to generate chat completion: ${error.message}`);
   }
