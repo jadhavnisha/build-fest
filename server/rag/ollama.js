@@ -23,9 +23,27 @@ try {
  * @returns {boolean}
  */
 function isConnectionError(error) {
-  return error.cause?.code === 'ECONNREFUSED' || 
-         error.code === 'ECONNREFUSED' ||
-         (error.name === 'TypeError' && error.message.includes('fetch'));
+  // Check for ECONNREFUSED
+  if (error.cause?.code === 'ECONNREFUSED' || error.code === 'ECONNREFUSED') {
+    return true;
+  }
+  
+  // Check for fetch-related TypeErrors (network failures)
+  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    return true;
+  }
+  
+  // Check for other common network errors
+  if (error.message && (
+    error.message.includes('ECONNREFUSED') ||
+    error.message.includes('ENOTFOUND') ||
+    error.message.includes('ETIMEDOUT') ||
+    error.message.includes('network')
+  )) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**
@@ -58,14 +76,14 @@ export function getOllamaHost() {
  */
 export async function generateEmbedding(text, model = 'nomic-embed-text') {
   try {
-    const response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
+    const response = await fetch(`${OLLAMA_HOST}/api/embed`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: model,
-        prompt: text
+        input: text  // Changed from 'prompt' to 'input' for /api/embed endpoint
       })
     });
     
@@ -75,8 +93,19 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     }
     
     const data = await response.json();
-    return data.embedding;
+    // /api/embed returns 'embeddings' array, we want the first one
+    return data.embeddings?.[0] || data.embedding;
   } catch (error) {
+    // Log detailed error information for debugging
+    console.error('\n🔍 Debug info:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      cause: error.cause,
+      causeName: error.cause?.name,
+      causeCode: error.cause?.code
+    });
+    
     if (isConnectionError(error)) {
       handleConnectionError(); // This throws, so no code after this executes
     }
