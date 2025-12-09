@@ -103,17 +103,17 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     }
     throw new Error('Unexpected response format from Ollama embedding API');
   } catch (error) {
-    // Log detailed error information for debugging (only in debug/dev mode)
-    if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
-      console.error('\n🔍 Debug info:', {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        cause: error.cause,
-        causeName: error.cause?.name,
-        causeCode: error.cause?.code
-      });
-    }
+    // Always log error information for troubleshooting
+    console.error('\n🔍 Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      cause: error.cause ? {
+        name: error.cause.name,
+        message: error.cause.message,
+        code: error.cause.code
+      } : undefined
+    });
     
     if (isConnectionError(error)) {
       handleConnectionError(); // This throws, so no code after this executes
