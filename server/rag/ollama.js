@@ -3,7 +3,19 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+// Validate and set OLLAMA_HOST
+let OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+try {
+  // Validate it's a proper URL
+  const url = new URL(OLLAMA_HOST);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    console.warn(`Invalid OLLAMA_HOST protocol: ${url.protocol}. Using default.`);
+    OLLAMA_HOST = 'http://localhost:11434';
+  }
+} catch (error) {
+  console.warn(`Invalid OLLAMA_HOST URL: ${OLLAMA_HOST}. Using default.`);
+  OLLAMA_HOST = 'http://localhost:11434';
+}
 
 /**
  * Execute Ollama embedding command via HTTP API
@@ -97,7 +109,12 @@ export async function checkOllamaAvailability(model = 'llama3') {
     const data = await response.json();
     // Check if the model exists in the list
     if (data.models && Array.isArray(data.models)) {
-      return data.models.some(m => m.name.includes(model));
+      // Use exact match or startsWith for more precise matching
+      return data.models.some(m => {
+        const modelName = m.name || '';
+        // Check for exact match or if the stored model name starts with the requested model
+        return modelName === model || modelName.startsWith(`${model}:`);
+      });
     }
     
     // If no model specified or API doesn't return models, just check if Ollama is running
