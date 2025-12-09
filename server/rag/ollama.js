@@ -37,12 +37,22 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     });
     
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
     
     const data = await response.json();
     return data.embedding;
   } catch (error) {
+    if (error.cause?.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
+      console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
+      console.error('Please ensure:');
+      console.error('  1. Ollama is installed: ollama --version');
+      console.error('  2. Ollama service is running: ollama serve');
+      console.error('  3. The service is accessible at: ' + OLLAMA_HOST);
+      console.error(`  4. Test with: curl ${OLLAMA_HOST}/api/tags\n`);
+      throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+    }
     console.error('Error generating embedding:', error.message);
     throw new Error(`Failed to generate embedding: ${error.message}`);
   }
@@ -79,12 +89,18 @@ export async function generateChatCompletion(systemPrompt, userPrompt, model = '
     });
     
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
     
     const data = await response.json();
     return data.message.content;
   } catch (error) {
+    if (error.cause?.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
+      console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
+      console.error('Please ensure Ollama service is running: ollama serve\n');
+      throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+    }
     console.error('Error generating chat completion:', error.message);
     throw new Error(`Failed to generate chat completion: ${error.message}`);
   }
