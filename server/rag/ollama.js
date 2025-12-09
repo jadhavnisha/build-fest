@@ -3,24 +3,33 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+
 /**
- * Execute Ollama embedding command
+ * Execute Ollama embedding command via HTTP API
  * @param {string} text - Text to embed
  * @param {string} model - Embedding model name
  * @returns {Promise<number[]>} - Embedding vector
  */
 export async function generateEmbedding(text, model = 'nomic-embed-text') {
   try {
-    const command = `ollama embed --model ${model} "${text.replace(/"/g, '\\"')}"`;
-    const { stdout, stderr } = await execAsync(command);
+    const response = await fetch(`${OLLAMA_HOST}/api/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        prompt: text
+      })
+    });
     
-    if (stderr && !stderr.includes('success')) {
-      console.error('Ollama stderr:', stderr);
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
     }
     
-    // Parse the embedding from stdout
-    const embedding = JSON.parse(stdout.trim());
-    return embedding;
+    const data = await response.json();
+    return data.embedding;
   } catch (error) {
     console.error('Error generating embedding:', error.message);
     throw new Error(`Failed to generate embedding: ${error.message}`);
@@ -28,7 +37,7 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
 }
 
 /**
- * Generate chat completion using Ollama
+ * Generate chat completion using Ollama via HTTP API
  * @param {string} systemPrompt - System instructions
  * @param {string} userPrompt - User message
  * @param {string} model - Model name
@@ -36,17 +45,33 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
  */
 export async function generateChatCompletion(systemPrompt, userPrompt, model = 'llama3') {
   try {
-    const prompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`;
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    const command = `ollama run ${model} "${escapedPrompt}"`;
+    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        stream: false
+      })
+    });
     
-    const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 10 });
-    
-    if (stderr) {
-      console.error('Ollama stderr:', stderr);
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
     }
     
-    return stdout.trim();
+    const data = await response.json();
+    return data.message.content;
   } catch (error) {
     console.error('Error generating chat completion:', error.message);
     throw new Error(`Failed to generate chat completion: ${error.message}`);
@@ -60,9 +85,30 @@ export async function generateChatCompletion(systemPrompt, userPrompt, model = '
  */
 export async function checkOllamaAvailability(model = 'llama3') {
   try {
-    const { stdout } = await execAsync('ollama list');
-    return stdout.includes(model);
+    // Try HTTP API first
+    const response = await fetch(`${OLLAMA_HOST}/api/tags`, {
+      method: 'GET'
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    // Check if the model exists in the list
+    if (data.models && Array.isArray(data.models)) {
+      return data.models.some(m => m.name.includes(model));
+    }
+    
+    // If no model specified or API doesn't return models, just check if Ollama is running
+    return true;
   } catch (error) {
-    return false;
+    // Fallback to CLI command
+    try {
+      const { stdout } = await execAsync('ollama list');
+      return stdout.includes(model);
+    } catch (cliError) {
+      return false;
+    }
   }
 }
