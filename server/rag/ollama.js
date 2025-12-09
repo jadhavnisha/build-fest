@@ -33,14 +33,14 @@ function isConnectionError(error) {
     return true;
   }
   
-  // Check for other common network errors
-  if (error.message && (
-    error.message.includes('ECONNREFUSED') ||
-    error.message.includes('ENOTFOUND') ||
-    error.message.includes('ETIMEDOUT') ||
-    error.message.includes('network')
-  )) {
-    return true;
+  // Check for other common network error codes
+  const networkErrorCodes = ['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EHOSTUNREACH'];
+  if (error.message) {
+    for (const code of networkErrorCodes) {
+      if (error.message.includes(code)) {
+        return true;
+      }
+    }
   }
   
   return false;
@@ -94,7 +94,12 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     
     const data = await response.json();
     // /api/embed returns 'embeddings' array, we want the first one
-    return data.embeddings?.[0] || data.embedding;
+    if (data.embeddings && Array.isArray(data.embeddings) && data.embeddings.length > 0) {
+      return data.embeddings[0];
+    }
+    // Fallback for unexpected response format
+    console.warn('Unexpected embedding response format:', data);
+    throw new Error('Unexpected response format from Ollama embedding API');
   } catch (error) {
     // Log detailed error information for debugging
     console.error('\n🔍 Debug info:', {
