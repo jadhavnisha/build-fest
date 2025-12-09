@@ -1,0 +1,19 @@
+{
+  "name": "rag-chatbot-server",
+  "version": "1.0.0",
+  "description": "Offline RAG chatbot backend using Ollama",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "embed": "node rag/embed.js"
+  },
+  "keywords": ["rag", "chatbot", "ollama", "offline"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
