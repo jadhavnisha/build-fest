@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { generateEmbedding, checkOllamaAvailability } from './ollama.js';
+import { generateEmbedding, checkOllamaAvailability, getOllamaHost } from './ollama.js';
 import { chunkText } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,7 +10,6 @@ const __dirname = path.dirname(__filename);
 const KNOWLEDGEBASE_DIR = path.join(__dirname, '../../knowledgebase');
 const VECTOR_STORE_PATH = path.join(__dirname, '../vector_store.json');
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
-const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 
 /**
  * Read all markdown files from knowledgebase
@@ -61,7 +60,7 @@ async function createVectorStore() {
   
   // Step 0: Check if Ollama is available
   console.log('Step 0: Checking Ollama availability...');
-  console.log(`Connecting to Ollama at: ${OLLAMA_HOST}`);
+  console.log(`Connecting to Ollama at: ${getOllamaHost()}`);
   
   const ollamaAvailable = await checkOllamaAvailability(EMBEDDING_MODEL);
   
@@ -71,7 +70,7 @@ async function createVectorStore() {
     console.log('  1. Ollama is installed: ollama --version');
     console.log('  2. Ollama service is running: ollama serve');
     console.log(`  3. The embedding model is pulled: ollama pull ${EMBEDDING_MODEL}`);
-    console.log(`  4. Test connection with: curl ${OLLAMA_HOST}/api/tags\n`);
+    console.log(`  4. Test connection with: curl ${getOllamaHost()}/api/tags\n`);
     process.exit(1);
   }
   

@@ -18,6 +18,40 @@ try {
 }
 
 /**
+ * Check if error is a connection failure
+ * @param {Error} error - Error to check
+ * @returns {boolean}
+ */
+function isConnectionError(error) {
+  return error.cause?.code === 'ECONNREFUSED' || 
+         error.code === 'ECONNREFUSED' ||
+         error.name === 'TypeError' && error.message.includes('fetch');
+}
+
+/**
+ * Handle connection errors with helpful messages
+ * @param {string} context - Context where error occurred
+ * @throws {Error}
+ */
+function handleConnectionError(context = 'operation') {
+  console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
+  console.error('Please ensure:');
+  console.error('  1. Ollama is installed: ollama --version');
+  console.error('  2. Ollama service is running: ollama serve');
+  console.error('  3. The service is accessible at: ' + OLLAMA_HOST);
+  console.error(`  4. Test with: curl ${OLLAMA_HOST}/api/tags\n`);
+  throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+}
+
+/**
+ * Get OLLAMA_HOST value
+ * @returns {string}
+ */
+export function getOllamaHost() {
+  return OLLAMA_HOST;
+}
+
+/**
  * Execute Ollama embedding command via HTTP API
  * @param {string} text - Text to embed
  * @param {string} model - Embedding model name
@@ -44,14 +78,8 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
     const data = await response.json();
     return data.embedding;
   } catch (error) {
-    if (error.cause?.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
-      console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
-      console.error('Please ensure:');
-      console.error('  1. Ollama is installed: ollama --version');
-      console.error('  2. Ollama service is running: ollama serve');
-      console.error('  3. The service is accessible at: ' + OLLAMA_HOST);
-      console.error(`  4. Test with: curl ${OLLAMA_HOST}/api/tags\n`);
-      throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+    if (isConnectionError(error)) {
+      handleConnectionError('generate embedding');
     }
     console.error('Error generating embedding:', error.message);
     throw new Error(`Failed to generate embedding: ${error.message}`);
@@ -96,10 +124,8 @@ export async function generateChatCompletion(systemPrompt, userPrompt, model = '
     const data = await response.json();
     return data.message.content;
   } catch (error) {
-    if (error.cause?.code === 'ECONNREFUSED' || error.message.includes('fetch failed')) {
-      console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
-      console.error('Please ensure Ollama service is running: ollama serve\n');
-      throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+    if (isConnectionError(error)) {
+      handleConnectionError('generate chat completion');
     }
     console.error('Error generating chat completion:', error.message);
     throw new Error(`Failed to generate chat completion: ${error.message}`);
