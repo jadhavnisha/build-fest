@@ -3,32 +3,135 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+// Validate and set OLLAMA_HOST
+// Use 127.0.0.1 instead of localhost to avoid IPv6 connection issues
+let OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+try {
+  // Validate it's a proper URL
+  const url = new URL(OLLAMA_HOST);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    console.warn(`Invalid OLLAMA_HOST protocol: ${url.protocol}. Using default.`);
+    OLLAMA_HOST = 'http://127.0.0.1:11434';
+  }
+  // Replace localhost with 127.0.0.1 to avoid IPv6 issues
+  if (url.hostname === 'localhost') {
+    OLLAMA_HOST = OLLAMA_HOST.replace('localhost', '127.0.0.1');
+    console.log(`Replaced 'localhost' with '127.0.0.1' to avoid IPv6 connection issues`);
+  }
+} catch (error) {
+  console.warn(`Invalid OLLAMA_HOST URL: ${OLLAMA_HOST}. Using default.`);
+  OLLAMA_HOST = 'http://127.0.0.1:11434';
+}
+
 /**
- * Execute Ollama embedding command
+ * Check if error is a connection failure
+ * @param {Error} error - Error to check
+ * @returns {boolean}
+ */
+function isConnectionError(error) {
+  // Check for ECONNREFUSED
+  if (error.cause?.code === 'ECONNREFUSED' || error.code === 'ECONNREFUSED') {
+    return true;
+  }
+  
+  // Check for fetch-related TypeErrors (network failures)
+  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    return true;
+  }
+  
+  // Check for other common network error codes
+  const networkErrorCodes = ['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EHOSTUNREACH'];
+  if (error.message) {
+    for (const code of networkErrorCodes) {
+      if (error.message.includes(code)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Handle connection errors with helpful messages
+ * @throws {Error}
+ */
+function handleConnectionError() {
+  console.error(`\n❌ Cannot connect to Ollama at ${OLLAMA_HOST}`);
+  console.error('Please ensure:');
+  console.error('  1. Ollama is installed: ollama --version');
+  console.error('  2. Ollama service is running: ollama serve');
+  console.error('  3. The service is accessible at: ' + OLLAMA_HOST);
+  console.error(`  4. Test with: curl ${OLLAMA_HOST}/api/tags\n`);
+  throw new Error(`Cannot connect to Ollama service at ${OLLAMA_HOST}. Is Ollama running?`);
+}
+
+/**
+ * Get OLLAMA_HOST value
+ * @returns {string}
+ */
+export function getOllamaHost() {
+  return OLLAMA_HOST;
+}
+
+/**
+ * Execute Ollama embedding command via HTTP API
  * @param {string} text - Text to embed
  * @param {string} model - Embedding model name
  * @returns {Promise<number[]>} - Embedding vector
  */
 export async function generateEmbedding(text, model = 'nomic-embed-text') {
   try {
-    const command = `ollama embed --model ${model} "${text.replace(/"/g, '\\"')}"`;
-    const { stdout, stderr } = await execAsync(command);
+    const response = await fetch(`${OLLAMA_HOST}/api/embed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        input: text  // Changed from 'prompt' to 'input' for /api/embed endpoint
+      })
+    });
     
-    if (stderr && !stderr.includes('success')) {
-      console.error('Ollama stderr:', stderr);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
     
-    // Parse the embedding from stdout
-    const embedding = JSON.parse(stdout.trim());
-    return embedding;
+    const data = await response.json();
+    // /api/embed returns 'embeddings' array, we want the first one
+    if (data.embeddings && Array.isArray(data.embeddings) && data.embeddings.length > 0) {
+      return data.embeddings[0];
+    }
+    // Fallback for unexpected response format
+    if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+      console.warn('Unexpected embedding response format. Keys:', Object.keys(data));
+    }
+    throw new Error('Unexpected response format from Ollama embedding API');
   } catch (error) {
+    // Always log error information for troubleshooting
+    console.error('\n🔍 Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      cause: error.cause ? {
+        name: error.cause.name,
+        message: error.cause.message,
+        code: error.cause.code
+      } : undefined
+    });
+    
+    if (isConnectionError(error)) {
+      handleConnectionError(); // This throws, so no code after this executes
+    }
+    // Only reached if not a connection error
     console.error('Error generating embedding:', error.message);
     throw new Error(`Failed to generate embedding: ${error.message}`);
   }
 }
 
 /**
- * Generate chat completion using Ollama
+ * Generate chat completion using Ollama via HTTP API
  * @param {string} systemPrompt - System instructions
  * @param {string} userPrompt - User message
  * @param {string} model - Model name
@@ -36,18 +139,39 @@ export async function generateEmbedding(text, model = 'nomic-embed-text') {
  */
 export async function generateChatCompletion(systemPrompt, userPrompt, model = 'llama3') {
   try {
-    const prompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`;
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    const command = `ollama run ${model} "${escapedPrompt}"`;
+    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        stream: false
+      })
+    });
     
-    const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 10 });
-    
-    if (stderr) {
-      console.error('Ollama stderr:', stderr);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
     
-    return stdout.trim();
+    const data = await response.json();
+    return data.message.content;
   } catch (error) {
+    if (isConnectionError(error)) {
+      handleConnectionError(); // This throws, so no code after this executes
+    }
+    // Only reached if not a connection error
     console.error('Error generating chat completion:', error.message);
     throw new Error(`Failed to generate chat completion: ${error.message}`);
   }
@@ -60,9 +184,35 @@ export async function generateChatCompletion(systemPrompt, userPrompt, model = '
  */
 export async function checkOllamaAvailability(model = 'llama3') {
   try {
-    const { stdout } = await execAsync('ollama list');
-    return stdout.includes(model);
+    // Try HTTP API first
+    const response = await fetch(`${OLLAMA_HOST}/api/tags`, {
+      method: 'GET'
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    // Check if the model exists in the list
+    if (data.models && Array.isArray(data.models)) {
+      // Use exact match or startsWith for more precise matching
+      return data.models.some(m => {
+        const modelName = m.name || '';
+        // Check for exact match or if the stored model name starts with the requested model
+        return modelName === model || modelName.startsWith(`${model}:`);
+      });
+    }
+    
+    // If no model specified or API doesn't return models, just check if Ollama is running
+    return true;
   } catch (error) {
-    return false;
+    // Fallback to CLI command
+    try {
+      const { stdout } = await execAsync('ollama list');
+      return stdout.includes(model);
+    } catch (cliError) {
+      return false;
+    }
   }
 }

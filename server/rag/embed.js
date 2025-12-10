@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { generateEmbedding } from './ollama.js';
+import { generateEmbedding, checkOllamaAvailability, getOllamaHost } from './ollama.js';
 import { chunkText } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +57,24 @@ async function embedChunks(chunks) {
  */
 async function createVectorStore() {
   console.log('🚀 Starting embedding process...\n');
+  
+  // Step 0: Check if Ollama is available
+  console.log('Step 0: Checking Ollama availability...');
+  console.log(`Connecting to Ollama at: ${getOllamaHost()}`);
+  
+  const ollamaAvailable = await checkOllamaAvailability(EMBEDDING_MODEL);
+  
+  if (!ollamaAvailable) {
+    console.log('\n❌ Ollama service is not available or model not found!');
+    console.log('\nPlease ensure:');
+    console.log('  1. Ollama is installed: ollama --version');
+    console.log('  2. Ollama service is running: ollama serve');
+    console.log(`  3. The embedding model is pulled: ollama pull ${EMBEDDING_MODEL}`);
+    console.log(`  4. Test connection with: curl ${getOllamaHost()}/api/tags\n`);
+    process.exit(1);
+  }
+  
+  console.log(`✅ Ollama is running and model '${EMBEDDING_MODEL}' is available\n`);
   
   // Step 1: Read markdown files
   console.log('Step 1: Reading markdown files...');
