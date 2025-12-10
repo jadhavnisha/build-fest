@@ -4,17 +4,23 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 // Validate and set OLLAMA_HOST
-let OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+// Use 127.0.0.1 instead of localhost to avoid IPv6 connection issues
+let OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 try {
   // Validate it's a proper URL
   const url = new URL(OLLAMA_HOST);
   if (!['http:', 'https:'].includes(url.protocol)) {
     console.warn(`Invalid OLLAMA_HOST protocol: ${url.protocol}. Using default.`);
-    OLLAMA_HOST = 'http://localhost:11434';
+    OLLAMA_HOST = 'http://127.0.0.1:11434';
+  }
+  // Replace localhost with 127.0.0.1 to avoid IPv6 issues
+  if (url.hostname === 'localhost') {
+    OLLAMA_HOST = OLLAMA_HOST.replace('localhost', '127.0.0.1');
+    console.log(`Replaced 'localhost' with '127.0.0.1' to avoid IPv6 connection issues`);
   }
 } catch (error) {
   console.warn(`Invalid OLLAMA_HOST URL: ${OLLAMA_HOST}. Using default.`);
-  OLLAMA_HOST = 'http://localhost:11434';
+  OLLAMA_HOST = 'http://127.0.0.1:11434';
 }
 
 /**
